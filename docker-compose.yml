@@ -1,0 +1,160 @@
+# ============================================================
+# Sara Go — Docker Compose (Full Stack)
+# Services: Frontend, Backend, PostgreSQL, MongoDB, Redis
+# ============================================================
+
+version: '3.9'
+
+services:
+
+  # ── Frontend (Next.js) ──────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runner
+    container_name: sara-go-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://backend:3001/api/v1
+      - NEXT_PUBLIC_PI_SANDBOX=true
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - sara-go-network
+    restart: unless-stopped
+
+  # ── Backend (NestJS) ────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runner
+    container_name: sara-go-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://sara_user:sara_secure_pw@postgres:5432/sara_go_db
+      - MONGODB_URI=mongodb://mongo:27017/sara-go
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ALLOWED_ORIGINS=http://localhost:3000,https://sara-go.com
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sara-go-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  # ── PostgreSQL ───────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sara-go-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sara_go_db
+      POSTGRES_USER: sara_user
+      POSTGRES_PASSWORD: sara_secure_pw
+      PGDATA: /data/postgres
+    volumes:
+      - postgres_data:/data/postgres
+      - ./backend/prisma/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - sara-go-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sara_user -d sara_go_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── MongoDB ──────────────────────────────────────────────────
+  mongo:
+    image: mongo:7-jammy
+    container_name: sara-go-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: sara-go
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - sara-go-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis ────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sara-go-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - sara-go-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis Commander (Dev Only) ───────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: sara-go-redis-ui
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - sara-go-network
+    profiles:
+      - dev
+    restart: unless-stopped
+
+# ── Networks ──────────────────────────────────────────────────
+networks:
+  sara-go-network:
+    driver: bridge
+    name: sara-go-net
+
+# ── Volumes ───────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
