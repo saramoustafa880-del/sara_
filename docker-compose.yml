@@ -1,0 +1,53 @@
+version: '3.9'
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: saravia
+      POSTGRES_USER: saravia
+      POSTGRES_PASSWORD: saravia
+    ports: ['5432:5432']
+    volumes: [postgres_data:/var/lib/postgresql/data]
+
+  mongo:
+    image: mongo:7
+    ports: ['27017:27017']
+    volumes: [mongo_data:/data/db]
+
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+
+  web:
+    build: ./apps/web
+    env_file: .env.example
+    ports: ['3000:3000']
+    depends_on: [auth-service, payment-service]
+
+  auth-service:
+    build: ./services/auth-service
+    env_file: .env.example
+    ports: ['3001:3001']
+    depends_on: [postgres, redis]
+
+  booking-service:
+    build: ./services/booking-service
+    env_file: .env.example
+    ports: ['3002:3002']
+    depends_on: [postgres, mongo, redis]
+
+  payment-service:
+    build: ./services/payment-service
+    env_file: .env.example
+    ports: ['3003:3003']
+    depends_on: [postgres, redis]
+
+  ai-service:
+    build: ./services/ai-service
+    env_file: .env.example
+    ports: ['3004:3004']
+    depends_on: [mongo, redis]
+
+volumes:
+  postgres_data:
+  mongo_data:
