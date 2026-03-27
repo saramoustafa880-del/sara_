@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
+}
+
+enum UserTier {
+  BASIC
+  PREMIUM
+  ELITE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  INITIATED
+  APPROVED
+  VERIFIED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id               String   @id @default(uuid())
+  piUid            String   @unique
+  username         String?
+  piWalletAddress  String?
+  tier             UserTier @default(BASIC)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  bookings         Booking[]
+  transactions     TransactionLedger[]
+}
+
+model Booking {
+  id              String        @id @default(uuid())
+  bookingId       String        @unique @default(uuid())
+  userId          String
+  destinationSlug String
+  totalPricePi    Decimal       @db.Decimal(18, 7)
+  status          BookingStatus @default(PENDING)
+  itineraryJson   Json
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id])
+}
+
+model TransactionLedger {
+  id                String        @id @default(uuid())
+  paymentId         String        @unique
+  userId            String
+  bookingId         String?
+  paymentStatus     PaymentStatus @default(INITIATED)
+  amountPi          Decimal       @db.Decimal(18, 7)
+  txid              String?
+  fromAddress       String?
+  toAddress         String?
+  verified          Boolean       @default(false)
+  idempotencyKey    String        @unique
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  user              User          @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorId     String?
+  action      String
+  resource    String
+  payloadJson Json
+  createdAt   DateTime @default(now())
+}
