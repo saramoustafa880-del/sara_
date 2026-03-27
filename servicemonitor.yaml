@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: saravia-services
+  namespace: saravia
+spec:
+  selector:
+    matchLabels:
+      monitor: saravia
+  namespaceSelector:
+    matchNames: [saravia]
+  endpoints:
+    - port: http
+      interval: 15s
+      path: /metrics
